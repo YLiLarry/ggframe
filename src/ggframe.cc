@@ -27,3 +27,8 @@ void Frame::save(filesystem::path path)
 {
 	m_cimg->save(path.string().c_str());
 }
+
+void Frame::load(filesystem::path path)
+{
+	m_cimg->load(path.string().c_str());
+}

@@ -19,5 +19,6 @@ namespace ggframe
 		void set(size_t x, size_t y, size_t d, uint8_t v);
 		void display();
 		void save(filesystem::path path);
+		void load(filesystem::path path);
 	};
 }
