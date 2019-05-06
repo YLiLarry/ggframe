@@ -28,15 +28,16 @@ target_include_directories(
     ${PROJECT_NAME} 
     PUBLIC 
         deps/CImg-2.5.6
-        deps/opencv/include
+        deps/opencv/win/include
 )
 
-file(GLOB OPENCV_LIBS deps/opencv/lib/*.lib)
-file(GLOB OPENCV_STATIC_LIBS deps/opencv/staticlib/*.lib)
+if(WIN32)
+file(GLOB OPENCV_LIBS deps/opencv/win/lib/*.lib)
+file(GLOB OPENCV_STATIC_LIBS deps/opencv/win/staticlib/*.lib)
+endif(WIN32)
+
 target_link_libraries(
     ${PROJECT_NAME} 
-		${OPENCV_LIBS}
-		${OPENCV_STATIC_LIBS}
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 
@@ -44,32 +45,10 @@ if(WIN32)
 	target_link_libraries(
 		${PROJECT_NAME} 
 		dwmapi 
+		${OPENCV_LIBS}
+		${OPENCV_STATIC_LIBS}
 	)
 endif(WIN32)
 
 if(APPLE)
-    target_link_directories(
-        ${PROJECT_NAME}
-        PUBLIC
-            ${X11_DIR}
-    )
-    target_include_directories(
-        ${PROJECT_NAME} 
-        PUBLIC 
-            deps/CImg-2.5.6
-            ${X11_INCLUDE_DIR}
-    )
-    target_link_libraries(
-        ${PROJECT_NAME} 
-        screen_capture_lite 
-        ${X11_LIBRARIES}
-        "-framework CoreFoundation"
-        "-framework CoreGraphics"
-        "-framework ImageIO"
-        "-framework CoreMedia"
-        "-framework CoreVideo"
-        "-framework AVFoundation"
-        "-framework AppKit"
-    )
-    target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_11)
 endif(APPLE)
