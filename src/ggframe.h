@@ -33,6 +33,7 @@ namespace ggframe
 		Rec(int top, int left, unsigned width, unsigned height);
 		Rec intersect(Rec const& other) const;
 		bool empty() const;
+		friend ostream& operator<<(ostream& out, Rec const& rec);
 	};
 
 	enum InputButton {
@@ -94,6 +95,7 @@ namespace ggframe
 		Rec frameRec() const;
 		Rec findPattern(Frame const& pattern) const;
 		Frame cutRec(Rec const& rec) const;
+		void crop(Rec const& rec);
 		bool empty() const;
 	};
 }

@@ -327,9 +327,24 @@ Frame Frame::cutRec(Rec const& rec) const
 	return output;
 }
 
+void Frame::crop(Rec const& rec)
+{
+	m_cimg->crop(rec.left(), rec.top(), rec.right(), rec.bottom());
+}
+
 Frame& Frame::operator=(Frame const& other)
 {
 	m_grid_size = other.m_grid_size;
 	m_cimg = make_unique<CImg<uint8_t>>(*other.m_cimg);
 	return *this;
 }
+
+ostream& ggframe::operator<<(ostream& out, Rec const& rec)
+{
+	out << "Rec { left:" << rec.left() << " right:" << rec.right() 
+		<< " top:" << rec.top() << " bottom:" << rec.bottom()
+		<< " width:" << rec.width() << " height:" << rec.height() 
+		<< " }";
+	return out;
+}
+
