@@ -10,6 +10,13 @@ using namespace ggframe;
 using namespace cv;
 using namespace cv::xfeatures2d;
 
+#if APPLE
+	using boost::filesystem::path;
+	using std::shared_ptr;
+#else
+	using std::filesystem::path;
+#endif
+
 Frame::Frame()
 {
 	m_cimg = make_unique<CImg<uint8_t>>();
@@ -22,7 +29,7 @@ Frame::Frame(unsigned w, unsigned h, unsigned d)
 	m_cimg = make_unique<CImg<uint8_t>>(w, h, 1, d, 0);
 }
 
-Frame::Frame(filesystem::path filepath)
+Frame::Frame(path filepath)
 {
 	m_cimg = make_unique<CImg<uint8_t>>(filepath.string().c_str());
 }
@@ -43,12 +50,12 @@ uint8_t Frame::get(unsigned r, unsigned c, unsigned d) const
 	return m_cimg->operator()(c, r, 0, d);
 }
 
-void Frame::save(filesystem::path path)
+void Frame::save(path path)
 {
 	m_cimg->save(path.string().c_str());
 }
 
-void Frame::load(filesystem::path path)
+void Frame::load(path path)
 {
 	m_cimg->load(path.string().c_str());
 }
@@ -348,3 +355,7 @@ ostream& ggframe::operator<<(ostream& out, Rec const& rec)
 	return out;
 }
 
+void Frame::resize(unsigned width, unsigned height)
+{
+	m_cimg->resize(width, height);
+}

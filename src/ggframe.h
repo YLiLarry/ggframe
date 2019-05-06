@@ -1,14 +1,25 @@
 #include <CImg.h>
 #include <memory>
-#include <filesystem>
-
 #include <opencv2/core.hpp>
+
+#if APPLE
+#include <boost/filesystem.hpp>
+#else
+#include <filesystem>
+#endif
 
 namespace ggframe
 {
 	using namespace cimg_library;
 	using namespace std;
 	using namespace cv;
+
+#if APPLE
+	using boost::filesystem::path;
+	using std::shared_ptr;
+#else
+	using std::filesystem::path;
+#endif
 
 	struct Pos
 	{
@@ -70,7 +81,7 @@ namespace ggframe
 	public:
 		Frame();
 		Frame(unsigned w, unsigned h, unsigned d);
-		Frame(filesystem::path filepath);
+		Frame(path filepath);
 		Frame(Frame const& other);
 		Frame& operator=(Frame const& other);
 		void set(unsigned r, unsigned c, unsigned d, uint8_t v);
@@ -89,13 +100,14 @@ namespace ggframe
 		void displaySiftInRec(Rec const& rec) const;
 		InputEvent waitForInput();
 		Pos mousePosition();
-		void save(filesystem::path path);
-		void load(filesystem::path path);
+		void save(path filepath);
+		void load(path filepath);
 		Rec bestGridRecCenteredAt(unsigned r, unsigned c, unsigned w, unsigned h);
 		Rec frameRec() const;
 		Rec findPattern(Frame const& pattern) const;
 		Frame cutRec(Rec const& rec) const;
 		void crop(Rec const& rec);
 		bool empty() const;
+		void resize(unsigned width, unsigned height);
 	};
 }

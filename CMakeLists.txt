@@ -11,7 +11,6 @@ file(GLOB HEADERS include/*.h)
 
 add_library(${PROJECT_NAME} STATIC ${SOURCES})
 
-
 install (TARGETS ${PROJECT_NAME}  
 	RUNTIME DESTINATION bin
 	ARCHIVE DESTINATION lib
@@ -19,29 +18,29 @@ install (TARGETS ${PROJECT_NAME}
 )
 install(FILES ${HEADERS} DESTINATION include/${PROJECT_NAME})
 
-target_link_directories(
-    ${PROJECT_NAME}
-    PUBLIC
-		deps/opencv/lib
+target_compile_features(
+	${PROJECT_NAME} 
+	PUBLIC cxx_std_17
 )
+
 target_include_directories(
     ${PROJECT_NAME} 
     PUBLIC 
         deps/CImg-2.5.6
-        deps/opencv/win/include
 )
-
-if(WIN32)
-file(GLOB OPENCV_LIBS deps/opencv/win/lib/*.lib)
-file(GLOB OPENCV_STATIC_LIBS deps/opencv/win/staticlib/*.lib)
-endif(WIN32)
 
 target_link_libraries(
     ${PROJECT_NAME} 
 )
-target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 
 if(WIN32)
+	file(GLOB OPENCV_LIBS deps/opencv/win/lib/*.lib)
+	file(GLOB OPENCV_STATIC_LIBS deps/opencv/win/staticlib/*.lib)
+	target_include_directories(
+		${PROJECT_NAME} 
+		PUBLIC 
+			deps/opencv/win/include
+	)
 	target_link_libraries(
 		${PROJECT_NAME} 
 		dwmapi 
@@ -51,4 +50,41 @@ if(WIN32)
 endif(WIN32)
 
 if(APPLE)
+	file(GLOB OPENCV_LIBS deps/opencv/mac/lib/*.dylib)
+	find_package(X11 REQUIRED)
+	find_package(Boost REQUIRED)
+	# macOS still does not ship with C++17 filesystem header
+	# we need to use boost::filesystem instead
+	target_compile_definitions(
+		${PROJECT_NAME}
+		PUBLIC
+			APPLE=1
+	)
+	target_link_directories(
+		${PROJECT_NAME}
+		PUBLIC
+			${X11_LIBRARY_DIRS}
+			${Boost_LIBRARY_DIRS}
+	)
+	target_include_directories(
+		${PROJECT_NAME} 
+		PUBLIC 
+			deps/opencv/mac/include
+			${X11_INCLUDE_DIR}
+			${Boost_INCLUDE_DIR}
+	)
+	target_link_libraries(
+		${PROJECT_NAME} 
+		screen_capture_lite 
+		${X11_LIBRARIES}
+		boost_filesystem
+		${OPENCV_LIBS}
+		"-framework CoreFoundation"
+		"-framework CoreGraphics"
+		"-framework ImageIO"
+		"-framework CoreMedia"
+		"-framework CoreVideo"
+		"-framework AVFoundation"
+		"-framework AppKit"
+	)
 endif(APPLE)
