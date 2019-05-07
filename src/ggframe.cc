@@ -1,4 +1,4 @@
-#include "ggframe.h"
+#include <ggframe.h>
 #include <iostream>
 
 #include <opencv2/xfeatures2d/nonfree.hpp>
@@ -19,77 +19,99 @@ using namespace cv::xfeatures2d;
 
 Frame::Frame()
 {
-	m_cimg = make_unique<CImg<uint8_t>>();
-	assert(m_cimg->width() == 0);
-	assert(m_cimg->height() == 0);
+	m_image = make_unique<image_t>();
+	assert(nCols() == 0);
+	assert(nRows() == 0);
 }
 
-Frame::Frame(unsigned w, unsigned h, unsigned d)
+Frame::Frame(unsigned nrows, unsigned ncols)
 {
-	m_cimg = make_unique<CImg<uint8_t>>(w, h, 1, d, 0);
+	m_image = make_unique<image_t>(nrows, ncols, CV_8UC4, 0);
 }
 
 Frame::Frame(path filepath)
 {
-	m_cimg = make_unique<CImg<uint8_t>>(filepath.string().c_str());
+	m_image = make_unique<image_t>();
+	load(filepath);
 }
 
 void Frame::display() const
 {
-	m_cimg_display->resize(m_cimg->width(), m_cimg->height());
-	m_cimg_display->display(*m_cimg);
+	static string window_title = "";
+	if (window_title.length() == 0) {
+		window_title = "ggcapture";
+		cv::namedWindow(window_title);
+	}
+	cv::imshow("ggcapture", *m_image);
+	cv::waitKey(1);
 }
 
-void Frame::set(unsigned r, unsigned c, unsigned d, uint8_t v)
+unsigned Frame::colorIndex(Color color) const
 {
-	m_cimg->operator()(c, r, 0, d) = v;
+	if (color == Color::A) {
+		return 3;
+	}
+	if (color == Color::R) {
+		return 2;
+	}
+	if (color == Color::G) {
+		return 1;
+	}
+	if (color == Color::B) {
+		return 0;
+	}
+	return 0;
 }
 
-uint8_t Frame::get(unsigned r, unsigned c, unsigned d) const
+void Frame::set(unsigned r, unsigned c, Color color, uint8_t v)
 {
-	return m_cimg->operator()(c, r, 0, d);
+	cv::Vec4b& vec = m_image->at<cv::Vec4b>(r,c);
+	vec[colorIndex(color)] = v;
+}
+
+uint8_t Frame::get(unsigned r, unsigned c, Color color) const
+{
+	return m_image->at<cv::Vec4b>(r,c)[colorIndex(color)];
 }
 
 void Frame::save(path path)
 {
-	m_cimg->save(path.string().c_str());
+	cv::imwrite(path.string().c_str(), *m_image);
 }
 
 void Frame::load(path path)
 {
-	m_cimg->load(path.string().c_str());
+	*m_image = cv::imread(path.string().c_str());
 }
-
-unique_ptr<CImgDisplay> Frame::m_cimg_display = make_unique<CImgDisplay>();
 
 InputEvent Frame::waitForInput()
 {
-	while (!m_cimg_display->is_closed()) {
-		if (m_cimg_display->button()) { // Left button clicked
-			m_cimg_display->set_button(m_cimg_display->button(), false);
-			return InputEvent{ Mouse, m_cimg_display->button(), Press, mousePosition() };
-		}
-		if (m_cimg_display->key()) {
-			m_cimg_display->set_key(m_cimg_display->key(), false);
-			return InputEvent{ Keyboard, m_cimg_display->key(), Press, mousePosition() };
-		}
-		m_cimg_display->wait();
-	}
+	// while (!m_image_display->is_closed()) {
+	// 	if (m_image_display->button()) { // Left button clicked
+	// 		m_image_display->set_button(m_image_display->button(), false);
+	// 		return InputEvent{ Mouse, m_image_display->button(), Press, mousePosition() };
+	// 	}
+	// 	if (m_image_display->key()) {
+	// 		m_image_display->set_key(m_image_display->key(), false);
+	// 		return InputEvent{ Keyboard, m_image_display->key(), Press, mousePosition() };
+	// 	}
+	// 	m_image_display->wait();
+	// }
 	return InputEvent{ Window, 0, WindowClose, Pos{} };
 }
 
 Pos Frame::mousePosition()
 {
-	return Pos{ m_cimg_display->mouse_y(), m_cimg_display->mouse_x() };
+	return Pos{ 0,0 };
 }
 
 void Frame::drawGrid()
 {
-	for (int r = 0; r < m_cimg->height(); r++) {
-		for (int c = 0; c < m_cimg->width(); c++) {
+	for (int r = 0; r < nRows(); r++) {
+		for (int c = 0; c < nCols(); c++) {
 			if (r % m_grid_size == 0 || c % m_grid_size == 0) {
-				for (int d = 0; d < 3; d++) {
-					set(r, c, d, min(get(r, c, d) + 25, 255));
+				for (int d = 0; d < nColors(); d++) {
+					set(r, c, static_cast<Color>(d), min(get(r, c, static_cast<Color>(d)) + 25, 255));
 				}
 			}
 		}
@@ -149,12 +171,12 @@ void Frame::drawRec(unsigned top, unsigned left, unsigned width, unsigned height
 		return;
 	}
 	for (unsigned r = 0; r < height; r++) {
-		set(top + r, left, 0, -1);
-		set(top + r, left + width - 1, 0, -1);
+		set(top + r, left, Color::R, -1);
+		set(top + r, left + width - 1, Color::R, -1);
 	}
 	for (unsigned c = 0; c < width; c++) {
-		set(top, left + c, 0, -1);
-		set(top + height - 1, left + c, 0, -1);;
+		set(top, left + c, Color::R, -1);
+		set(top + height - 1, left + c, Color::R, -1);;
 	}
 }
 
@@ -165,22 +187,22 @@ void Frame::drawRec(Rec const& rec)
 
 unsigned Frame::lastCol() const
 {
-	return m_cimg->width() > 0 ? m_cimg->width() - 1 : 0;
+	return nCols() > 0 ? nCols() - 1 : 0;
 }
 
 unsigned Frame::lastRow() const
 {
-	return m_cimg->height() > 0 ? m_cimg->height() - 1 : 0;
+	return nRows() > 0 ? nRows() - 1 : 0;
 }
 
 unsigned Frame::nCols() const
 {
-	return m_cimg->width();
+	return m_image->size().width;
 }
 
 unsigned Frame::nRows() const
 {
-	return m_cimg->height();
+	return m_image->size().height;
 }
 
 void Frame::displaySift() const
@@ -194,8 +216,8 @@ void Frame::showKeyPoints(vector<KeyPoint> const& keypoints) const
 	for (int r = 0; r < nRows(); r++) {
 		for (int c = 0; c < nCols(); c++) {
 			uint8_t v = 0;
-			for (int d = 0; d < m_cimg->depth(); d++) {
-				v = max(v, get(r, c, d));
+			for (int d = 0; d < nColors(); d++) {
+				v = max(v, get(r, c, static_cast<Color>(d)));
 			}
 			mat.at<uint8_t>(r, c) = v;
 		}
@@ -220,8 +242,8 @@ vector<KeyPoint> Frame::getSiftKeyPointsInRec(Rec const& rec) const
 	for (int r = 0; r < nRows(); r++) {
 		for (int c = 0; c < nCols(); c++) {
 			uint8_t v = 0;
-			for (int d = 0; d < m_cimg->depth(); d++) {
-				v = max(v, get(r, c, v));
+			for (int d = 0; d < nColors(); d++) {
+				v = max(v, get(r, c, static_cast<Color>(d)));
 			}
 			mat.at<uint8_t>(r, c) = v;
 			if (rec.left() <= c && c <= rec.right()
@@ -245,7 +267,7 @@ bool Rec::empty() const
 
 bool Frame::empty() const
 {
-	return m_cimg->height() == 0 || m_cimg->width() == 0;
+	return nRows() == 0 || nCols() == 0;
 }
 
 cv::Mat Frame::cvMat() const
@@ -254,8 +276,8 @@ cv::Mat Frame::cvMat() const
 	for (int r = 0; r < nRows(); r++) {
 		for (int c = 0; c < nCols(); c++) {
 			uint8_t v = 0;
-			for (int d = 0; d < m_cimg->depth(); d++) {
-				v = max(v, get(r, c, d));
+			for (int d = 0; d < nColors(); d++) {
+				v = max(v, get(r, c, static_cast<Color>(d)));
 			}
 			mat.at<uint8_t>(r, c) = v;
 		}
@@ -317,17 +339,17 @@ Rec Rec::intersect(Rec const& other) const
 Frame::Frame(Frame const& other)
 {
 	m_grid_size = other.m_grid_size;
-	m_cimg = make_unique<CImg<uint8_t>>(*other.m_cimg);
+	m_image = make_unique<image_t>(*other.m_image);
 }
 
 Frame Frame::cutRec(Rec const& rec) const
 {
-	Frame output(rec.width(), rec.height(), m_cimg->depth());
+	Frame output(rec.width(), rec.height());
 	for (int row = 0; row < rec.height(); row++) {
 		for (int col = 0; col < rec.width(); col++) {
-			for (int depth = 0; depth < m_cimg->depth(); depth++) {
-				uint8_t color = get(rec.top() + row, rec.left() + col, depth);
-				output.set(row, col, depth, color);
+			for (int depth = 0; depth < nColors(); depth++) {
+				uint8_t color = get(rec.top() + row, rec.left() + col, static_cast<Color>(depth));
+				output.set(row, col, static_cast<Color>(depth), color);
 			}
 		}
 	}
@@ -336,13 +358,15 @@ Frame Frame::cutRec(Rec const& rec) const
 
 void Frame::crop(Rec const& rec)
 {
-	m_cimg->crop(rec.left(), rec.top(), rec.right(), rec.bottom());
+	cv::Range row_range(rec.top(), rec.bottom());
+	cv::Range col_range(rec.left(), rec.right());
+	m_image = make_unique<image_t>(*m_image, row_range, col_range);
 }
 
 Frame& Frame::operator=(Frame const& other)
 {
 	m_grid_size = other.m_grid_size;
-	m_cimg = make_unique<CImg<uint8_t>>(*other.m_cimg);
+	m_image = make_unique<image_t>(*other.m_image);
 	return *this;
 }
 
@@ -357,5 +381,21 @@ ostream& ggframe::operator<<(ostream& out, Rec const& rec)
 
 void Frame::resize(unsigned width, unsigned height)
 {
-	m_cimg->resize(width, height);
+	m_image->resize(width, height);
 }
+
+unsigned Frame::nColors() const
+{
+	return 3;
+}
+
+uint8_t* Frame::data() const
+{
+	return m_image->data;
+}
+
+uint8_t* Frame::data()
+{
+	return m_image->data;
+}
+

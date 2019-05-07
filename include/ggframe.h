@@ -1,4 +1,3 @@
-#include <CImg.h>
 #include <memory>
 #include <opencv2/core.hpp>
 
@@ -10,7 +9,6 @@
 
 namespace ggframe
 {
-	using namespace cimg_library;
 	using namespace std;
 	using namespace cv;
 
@@ -68,24 +66,31 @@ namespace ggframe
 		Pos mouse;
 	};
 
+	enum Color {
+		R, G, B, A
+	};
+	 
 	class Frame
 	{
+		typedef cv::Mat image_t;
 	private:
-		unique_ptr<CImg<uint8_t>> m_cimg;
-		static unique_ptr<CImgDisplay> m_cimg_display;
+		unique_ptr<image_t> m_image;
 		int m_grid_size = 1;
 		vector<KeyPoint> getSiftKeyPointsInRec(Rec const& rec) const;
 		void showKeyPoints(vector<cv::KeyPoint> const& keypoints) const;
 		cv::Mat cvMat() const;
+		unsigned colorIndex(Color color) const;
+		unsigned nColors() const;
 
 	public:
 		Frame();
-		Frame(unsigned w, unsigned h, unsigned d);
+		Frame(unsigned nrows, unsigned ncols);
 		Frame(path filepath);
 		Frame(Frame const& other);
 		Frame& operator=(Frame const& other);
-		void set(unsigned r, unsigned c, unsigned d, uint8_t v);
-		uint8_t get(unsigned r, unsigned c, unsigned d) const;
+		void set(unsigned r, unsigned c, Color color, uint8_t v);
+		void setBGR(unsigned r, unsigned c, uint8_t v);
+		uint8_t get(unsigned r, unsigned c, Color color) const;
 		unsigned lastCol() const;
 		unsigned lastRow() const;
 		unsigned nCols() const;
@@ -109,5 +114,7 @@ namespace ggframe
 		void crop(Rec const& rec);
 		bool empty() const;
 		void resize(unsigned width, unsigned height);
+		uint8_t* data() const;
+		uint8_t* data();
 	};
 }

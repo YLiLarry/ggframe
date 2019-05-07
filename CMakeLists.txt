@@ -26,7 +26,7 @@ target_compile_features(
 target_include_directories(
     ${PROJECT_NAME} 
     PUBLIC 
-        deps/CImg-2.5.6
+		./include
 )
 
 target_link_libraries(
