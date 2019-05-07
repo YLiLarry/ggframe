@@ -3,8 +3,8 @@ project(ggframe VERSION 1.0)
 
 option(build_example "build examples?" ON)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-set (CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 file(GLOB SOURCES src/*.cc)
 file(GLOB HEADERS include/*.h)
@@ -34,8 +34,9 @@ target_link_libraries(
 )
 
 if(WIN32)
-	file(GLOB OPENCV_LIBS deps/opencv/win/lib/*.lib)
-	file(GLOB OPENCV_STATIC_LIBS deps/opencv/win/staticlib/*.lib)
+	file(GLOB OPENCV_LIBS deps/opencv/win/x64/vc16/lib/*.lib)
+	file(GLOB OPENCV_DLLS deps/opencv/win/x64/vc16/bin/*.dll)
+	file(COPY ${OPENCV_DLLS} DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 	target_include_directories(
 		${PROJECT_NAME} 
 		PUBLIC 
@@ -45,7 +46,6 @@ if(WIN32)
 		${PROJECT_NAME} 
 		dwmapi 
 		${OPENCV_LIBS}
-		${OPENCV_STATIC_LIBS}
 	)
 endif(WIN32)
 
