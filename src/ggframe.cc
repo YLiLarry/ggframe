@@ -4,11 +4,12 @@
 #include <opencv2/xfeatures2d/nonfree.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/features2d/features2d.hpp>
+#include <opencv2/imgproc.hpp>
 
 using namespace std;
 using namespace ggframe;
-using namespace cv;
 using namespace cv::xfeatures2d;
+using ggframe::Size;
 
 #if APPLE
 	using boost::filesystem::path;
@@ -39,10 +40,10 @@ void Frame::display() const
 {
 	static string window_title = "";
 	if (window_title.length() == 0) {
-		window_title = "ggcapture";
+		window_title = "ggframe";
 		cv::namedWindow(window_title);
 	}
-	cv::imshow("ggcapture", *m_image);
+	cv::imshow("ggframe", *m_image);
 	cv::waitKey(1);
 }
 
@@ -86,23 +87,23 @@ void Frame::load(path path)
 
 InputEvent Frame::waitForInput()
 {
-	// while (!m_image_display->is_closed()) {
-	// 	if (m_image_display->button()) { // Left button clicked
-	// 		m_image_display->set_button(m_image_display->button(), false);
-	// 		return InputEvent{ Mouse, m_image_display->button(), Press, mousePosition() };
-	// 	}
-	// 	if (m_image_display->key()) {
-	// 		m_image_display->set_key(m_image_display->key(), false);
-	// 		return InputEvent{ Keyboard, m_image_display->key(), Press, mousePosition() };
-	// 	}
-	// 	m_image_display->wait();
-	// }
-	return InputEvent{ Window, 0, WindowClose, Pos{} };
-}
-
-Pos Frame::mousePosition()
-{
-	return Pos{ 0,0 };
+	struct CV_SetMouseCallBack_UserData_Wrapper {
+		InputEvent input_event;
+		bool waiting_for_input;
+	};
+	CV_SetMouseCallBack_UserData_Wrapper userdata_wrapper;
+	userdata_wrapper.waiting_for_input = true;
+	cv::setMouseCallback("ggframe", [](int event, int x, int y, int flags, void* userdata) {
+		auto userdata_wrapper = static_cast<CV_SetMouseCallBack_UserData_Wrapper*>(userdata);
+		if (event == cv::EVENT_LBUTTONDOWN) {
+			userdata_wrapper->input_event = InputEvent{ Mouse, MouseLeft, Press, Pos::rc(y,x) };
+			userdata_wrapper->waiting_for_input = false;
+		}
+	}, &userdata_wrapper);
+	while (userdata_wrapper.waiting_for_input) {
+		cv::waitKey(1);
+	}
+	return userdata_wrapper.input_event;
 }
 
 void Frame::drawGrid()
@@ -110,79 +111,78 @@ void Frame::drawGrid()
 	for (int r = 0; r < nRows(); r++) {
 		for (int c = 0; c < nCols(); c++) {
 			if (r % m_grid_size == 0 || c % m_grid_size == 0) {
-				for (int d = 0; d < nColors(); d++) {
-					set(r, c, static_cast<Color>(d), min(get(r, c, static_cast<Color>(d)) + 25, 255));
-				}
+				set(r, c, Color::R, min(get(r, c, Color::R) + 25, 255));
+				set(r, c, Color::B, min(get(r, c, Color::B) + 25, 255));
+				set(r, c, Color::G, min(get(r, c, Color::G) + 25, 255));
 			}
 		}
 	}
 }
 
-unsigned Frame::gridSize()
-{
-	return m_grid_size;
-}
+unsigned Frame::gridSize() const { return m_grid_size; }
 
 void Frame::setGridSize(unsigned size)
 {
 	m_grid_size = size;
 }
 
-Rec::Rec(int top, int left, unsigned width, unsigned height)
-	: m_t(top), m_l(left), m_w(width), m_h(height)
-{
-
-}
-
 int Rec::left() const { return m_l; }
-int Rec::right() const { return m_l + m_w - 1; }
+int Rec::right() const { return m_r; }
 int Rec::top() const { return m_t; }
-int Rec::bottom() const { return m_t + m_h - 1; }
+int Rec::bottom() const { return m_b; }
 unsigned Rec::width() const { return m_w; }
 unsigned Rec::height() const { return m_h; }
 
-Rec Frame::bestGridRecCenteredAt(unsigned r, unsigned c, unsigned w, unsigned h)
+int Pos::row() const { return m_r; }
+int Pos::col() const { return m_c; }
+
+unsigned ggframe::Size::height() const { return m_h; }
+unsigned ggframe::Size::width() const { return m_w; }
+
+Rec Frame::bestGridRecCenteredAt(Pos const& pt, ggframe::Size const& size)
 {	
 	/* calculate the number of cells needed */
-	unsigned nc = w / m_grid_size + 1;
-	unsigned nr = h / m_grid_size + 1;
-	/* align size */
-	w = nc * m_grid_size;
-	h = nr * m_grid_size;
-	/* find bounds */
-	int left = c - w / 2;
-	int top = r - h / 2;
-	left = max(left, 0);
-	top = max(top, 0);
-	/* align bounds to grid */
-	int gl = (left / m_grid_size) * m_grid_size;
-	int gt = (top / m_grid_size) * m_grid_size;
-	unsigned gr = gl + nc * m_grid_size - 1;
-	unsigned gb = gt + nr * m_grid_size - 1;
-	gr = min(gr, lastCol());
-	gb = min(gb, lastRow());
-	Rec unbounded = Rec(gt, gl, gr - gl + 1, gb - gt + 1);
+	unsigned cells_ncols = size.width() / gridSize();
+    unsigned cells_nrows = size.height() / gridSize();
+    if (size.width() % gridSize() > 0) {
+        cells_ncols++;
+    }
+    if (size.height() % gridSize() > 0) {
+        cells_nrows++;
+    }
+    unsigned clicked_cell_row = pt.row() / gridSize();
+    unsigned clicked_cell_col = pt.col() / gridSize();
+    unsigned left_cell = clicked_cell_col - cells_ncols / 2;
+    unsigned top_cell = clicked_cell_row - cells_nrows / 2;
+    unsigned right_cell = left_cell + cells_ncols - 1;
+    unsigned bottom_cell = top_cell + cells_nrows - 1;
+    int left = left_cell * gridSize();
+    int top = top_cell * gridSize();
+    int bottom = (bottom_cell + 1) * gridSize();
+    int right = (right_cell + 1) * gridSize();
+	Rec unbounded = Rec::tlbr(top, left, bottom, right);
 	return unbounded.intersect(frameRec());
 }
 
-void Frame::drawRec(unsigned top, unsigned left, unsigned width, unsigned height)
+Pos Pos::rc(int r, int c)
 {
-	if (!width || !height) {
-		return;
-	}
-	for (unsigned r = 0; r < height; r++) {
-		set(top + r, left, Color::R, -1);
-		set(top + r, left + width - 1, Color::R, -1);
-	}
-	for (unsigned c = 0; c < width; c++) {
-		set(top, left + c, Color::R, -1);
-		set(top + height - 1, left + c, Color::R, -1);;
-	}
+    Pos rtv;
+    rtv.m_r = r;
+    rtv.m_c = c;
+    return rtv;
+}
+
+ggframe::Size ggframe::Size::hw(int h, int w)
+{
+    Size rtv;
+    rtv.m_h = h;
+    rtv.m_w = w;
+    return rtv;
 }
 
 void Frame::drawRec(Rec const& rec)
 {
-	drawRec(rec.top(), rec.left(), rec.width(), rec.height());
+    cv::rectangle(*m_image, cv::Point(rec.left(), rec.top()), cv::Point(rec.right(), rec.bottom()), cv::Scalar(0,0,255));
 }
 
 unsigned Frame::lastCol() const
@@ -197,12 +197,12 @@ unsigned Frame::lastRow() const
 
 unsigned Frame::nCols() const
 {
-	return m_image->size().width;
+	return m_image->cols;
 }
 
 unsigned Frame::nRows() const
 {
-	return m_image->size().height;
+	return m_image->rows;
 }
 
 void Frame::displaySift() const
@@ -216,9 +216,9 @@ void Frame::showKeyPoints(vector<KeyPoint> const& keypoints) const
 	for (int r = 0; r < nRows(); r++) {
 		for (int c = 0; c < nCols(); c++) {
 			uint8_t v = 0;
-			for (int d = 0; d < nColors(); d++) {
-				v = max(v, get(r, c, static_cast<Color>(d)));
-			}
+			v = max(v, get(r, c, Color::R));
+			v = max(v, get(r, c, Color::B));
+			v = max(v, get(r, c, Color::G));
 			mat.at<uint8_t>(r, c) = v;
 		}
 	}
@@ -242,9 +242,9 @@ vector<KeyPoint> Frame::getSiftKeyPointsInRec(Rec const& rec) const
 	for (int r = 0; r < nRows(); r++) {
 		for (int c = 0; c < nCols(); c++) {
 			uint8_t v = 0;
-			for (int d = 0; d < nColors(); d++) {
-				v = max(v, get(r, c, static_cast<Color>(d)));
-			}
+			v = max(v, get(r, c, Color::R));
+			v = max(v, get(r, c, Color::B));
+			v = max(v, get(r, c, Color::G));
 			mat.at<uint8_t>(r, c) = v;
 			if (rec.left() <= c && c <= rec.right()
 				&& rec.top() <= r && r <= rec.bottom()) 
@@ -276,9 +276,9 @@ cv::Mat Frame::cvMat() const
 	for (int r = 0; r < nRows(); r++) {
 		for (int c = 0; c < nCols(); c++) {
 			uint8_t v = 0;
-			for (int d = 0; d < nColors(); d++) {
-				v = max(v, get(r, c, static_cast<Color>(d)));
-			}
+			v = max(v, get(r, c, Color::R));
+			v = max(v, get(r, c, Color::B));
+			v = max(v, get(r, c, Color::G));
 			mat.at<uint8_t>(r, c) = v;
 		}
 	}
@@ -318,13 +318,25 @@ Rec Frame::findPattern(Frame const& pattern) const
 		min_l = min(frame_col, min_l);
 		max_r = max(frame_col, max_r);
 	}
-	Rec matched_rec(min_t, min_l, max_r - min_l + 1, max_b - min_t + 1);
+	Rec matched_rec = Rec::tlbr(min_t, min_l, max_b, max_r);
 	return matched_rec.intersect(frameRec());
+}
+
+Rec Rec::tlbr(int top, int left, int bottom, int right)
+{
+    Rec rtv;
+    rtv.m_t = top;
+    rtv.m_l = left;
+    rtv.m_b = bottom;
+    rtv.m_r = right;
+    rtv.m_h = bottom - top + 1;
+    rtv.m_w = right - left + 1;
+    return rtv;
 }
 
 Rec Frame::frameRec() const
 {
-	return Rec(0,0,nCols(),nRows());
+	return Rec::tlbr(0,0,lastRow(),lastCol());
 }
 
 Rec Rec::intersect(Rec const& other) const
@@ -333,27 +345,13 @@ Rec Rec::intersect(Rec const& other) const
 	int t = max(top(), other.top());
 	int r = min(right(), other.right());
 	int b = min(bottom(), other.bottom());
-	return Rec(t, l, r - l + 1, b - t + 1);
+	return Rec::tlbr(t, l, b, r);
 }
 
 Frame::Frame(Frame const& other)
 {
 	m_grid_size = other.m_grid_size;
 	m_image = make_unique<image_t>(*other.m_image);
-}
-
-Frame Frame::cutRec(Rec const& rec) const
-{
-	Frame output(rec.width(), rec.height());
-	for (int row = 0; row < rec.height(); row++) {
-		for (int col = 0; col < rec.width(); col++) {
-			for (int depth = 0; depth < nColors(); depth++) {
-				uint8_t color = get(rec.top() + row, rec.left() + col, static_cast<Color>(depth));
-				output.set(row, col, static_cast<Color>(depth), color);
-			}
-		}
-	}
-	return output;
 }
 
 void Frame::crop(Rec const& rec)
@@ -379,14 +377,9 @@ ostream& ggframe::operator<<(ostream& out, Rec const& rec)
 	return out;
 }
 
-void Frame::resize(unsigned width, unsigned height)
+void Frame::resize(ggframe::Size const& size)
 {
-	m_image->resize(width, height);
-}
-
-unsigned Frame::nColors() const
-{
-	return 3;
+	m_image->resize(size.width(), size.height());
 }
 
 uint8_t* Frame::data() const
