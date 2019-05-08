@@ -72,7 +72,7 @@ namespace ggframe
         Mouse, Keyboard, Window
     };
 
-    enum InputEventType {
+    enum InputAction {
         Press, Release, WindowClose
     };
 
@@ -80,7 +80,7 @@ namespace ggframe
     {
         InputSource source;
         unsigned keyCode;
-        InputEventType type;
+        InputAction type;
         Pos mouse;
     };
 
@@ -96,7 +96,8 @@ namespace ggframe
         int m_grid_size = 1;
         vector<KeyPoint> getSiftKeyPointsInRec(Rec const& rec) const;
         void showKeyPoints(vector<cv::KeyPoint> const& keypoints) const;
-        cv::Mat cvMat() const;
+        cv::Mat& cvMat();
+        cv::Mat const& cvMat() const;
         unsigned colorIndex(Color color) const;
 
     public:
@@ -123,7 +124,7 @@ namespace ggframe
         void load(path filepath);
         Rec bestGridRecCenteredAt(Pos const&, Size const&);
         Rec frameRec() const;
-        Rec findPattern(Frame const& pattern) const;
+        Rec recMatchedTemplate(Frame const& pattern) const;
         void crop(Rec const& rec);
         bool empty() const;
         void resize(Size const& size);

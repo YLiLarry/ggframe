@@ -101,7 +101,13 @@ InputEvent Frame::waitForInput()
 		}
 	}, &userdata_wrapper);
 	while (userdata_wrapper.waiting_for_input) {
-		cv::waitKey(1);
+		int key = cv::waitKey(1);
+		if (key >= 0) {
+			cv:setMouseCallback("ggframe", nullptr);
+			userdata_wrapper.waiting_for_input = false;
+			userdata_wrapper.input_event = InputEvent{ Keyboard, static_cast<unsigned>(key), Press, Pos() };
+			break;
+		}
 	}
 	return userdata_wrapper.input_event;
 }
@@ -212,18 +218,8 @@ void Frame::displaySift() const
 
 void Frame::showKeyPoints(vector<KeyPoint> const& keypoints) const
 {
-	Mat mat(nRows(), nCols(), CV_8U);
-	for (int r = 0; r < nRows(); r++) {
-		for (int c = 0; c < nCols(); c++) {
-			uint8_t v = 0;
-			v = max(v, get(r, c, Color::R));
-			v = max(v, get(r, c, Color::B));
-			v = max(v, get(r, c, Color::G));
-			mat.at<uint8_t>(r, c) = v;
-		}
-	}
 	Mat mat_keypts;
-	drawKeypoints(mat, keypoints, mat_keypts);
+	drawKeypoints(*m_image, keypoints, mat_keypts);
 	cv::imshow("img keypoints", mat_keypts);
 	cv::waitKey(0);
 }
@@ -270,55 +266,65 @@ bool Frame::empty() const
 	return nRows() == 0 || nCols() == 0;
 }
 
-cv::Mat Frame::cvMat() const
+cv::Mat& Frame::cvMat() { return *m_image; }
+cv::Mat const& Frame::cvMat() const { return *m_image; }
+
+Rec Frame::recMatchedTemplate(Frame const& pattern) const
 {
-	Mat mat(nRows(), nCols(), CV_8U);
-	for (int r = 0; r < nRows(); r++) {
-		for (int c = 0; c < nCols(); c++) {
-			uint8_t v = 0;
-			v = max(v, get(r, c, Color::R));
-			v = max(v, get(r, c, Color::B));
-			v = max(v, get(r, c, Color::G));
-			mat.at<uint8_t>(r, c) = v;
+	/* open fucking cv api is as follows in its code, 
+		the query image is also known as image1, meaning the template image (usually smaller)
+		the train image is also known as image2, meaning the scene image that contains the templated object 
+	*/
+	auto sift = SIFT::create(0,3,0.08,10,0.8);
+
+	/* compute keypoints and descriptors */
+	cv::Mat query_desc;
+	cv::Mat train_desc;
+	vector<KeyPoint> query_keypoints;
+	vector<KeyPoint> train_keypoints;
+	sift->detectAndCompute(*pattern.m_image, cv::noArray(), query_keypoints, query_desc);
+	sift->detectAndCompute(*m_image, cv::noArray(), train_keypoints, train_desc);
+
+	/* filter matches */
+	vector<cv::DMatch> good_matches;
+	vector<vector<char>> match_mask;
+	
+	auto bforce = cv::BFMatcher::create(NORM_L2, false);
+	vector<vector<cv::DMatch>> matches;
+	bforce->add(train_desc);
+	bforce->knnMatch(query_desc, train_desc, matches, 2);
+
+	for (vector<cv::DMatch> const& m : matches) {
+		cv::DMatch const& fst_match = m[0];
+		cv::DMatch const& snd_match = m[1];
+		vector<char> local_mask;
+		if (fst_match.distance / snd_match.distance < 0.8) {
+			good_matches.push_back(fst_match);
+			local_mask.push_back(1);
+		} else {
+			local_mask.push_back(0);
 		}
+		local_mask.push_back(0);
+		match_mask.push_back(local_mask);
 	}
-	return mat;
-}
 
-Rec Frame::findPattern(Frame const& pattern) const
-{
-	auto sift = SIFT::create();
-	vector<KeyPoint> self_kps = getSiftKeyPointsInRec(frameRec());
-	vector<KeyPoint> pattern_kps = pattern.getSiftKeyPointsInRec(pattern.frameRec());
-	cv::Mat self_mat = cvMat();
-	cv::Mat pattern_mat = pattern.cvMat();
-	cv::Mat self_desc;
-	cv::Mat pattern_desc;
-	sift->compute(self_mat, self_kps, self_desc);
-	sift->compute(pattern_mat, pattern_kps, pattern_desc);
-
-	pattern.displaySift();
-	displaySift();
-
-	cv::BFMatcher bforce;
-	vector<cv::DMatch> matches;
-	bforce.add(self_desc);
-	bforce.match(pattern_desc, matches);
-	unsigned min_t = -1;
-	unsigned max_b = 0;
-	unsigned min_l = -1;
-	unsigned max_r = 0;
-	for (cv::DMatch& m : matches) {
-		KeyPoint& pattern_kp = pattern_kps[m.queryIdx];
-		KeyPoint& self_kp = self_kps[m.trainIdx];
-		unsigned frame_col = self_kp.pt.x;
-		unsigned frame_row = self_kp.pt.y;
-		min_t = min(frame_row, min_t);
-		max_b = max(frame_row, max_b);
-		min_l = min(frame_col, min_l);
-		max_r = max(frame_col, max_r);
+	/* draw matches */
+	vector<cv::KeyPoint> good_query_keypoints;
+	vector<cv::KeyPoint> good_train_keypoints;
+	for (cv::DMatch const& m : good_matches) {
+		good_query_keypoints.push_back(query_keypoints[m.queryIdx]);
+		good_train_keypoints.push_back(train_keypoints[m.trainIdx]);
 	}
-	Rec matched_rec = Rec::tlbr(min_t, min_l, max_b, max_r);
+
+	assert(good_query_keypoints.size() > 0);
+
+	Frame canvas;
+	cv::drawMatches(*pattern.m_image, query_keypoints, *m_image, train_keypoints, matches, *canvas.m_image, cv::Scalar::all(-1), cv::Scalar::all(-1), match_mask);
+	canvas.display();
+	std::cerr << "showing filtered matches" << std::endl;
+	canvas.waitForInput();
+
+	Rec matched_rec;
 	return matched_rec.intersect(frameRec());
 }
 
@@ -351,14 +357,19 @@ Rec Rec::intersect(Rec const& other) const
 Frame::Frame(Frame const& other)
 {
 	m_grid_size = other.m_grid_size;
-	m_image = make_unique<image_t>(*other.m_image);
+	m_image = make_unique<image_t>();
+	other.m_image->copyTo(*m_image);
+	assert(m_image->isContinuous());
 }
 
 void Frame::crop(Rec const& rec)
 {
 	cv::Range row_range(rec.top(), rec.bottom());
 	cv::Range col_range(rec.left(), rec.right());
-	m_image = make_unique<image_t>(*m_image, row_range, col_range);
+	cv::Mat ref_mat = cv::Mat(*m_image, row_range, col_range);
+	m_image = make_unique<image_t>();
+	ref_mat.copyTo(*m_image);
+	assert(m_image->isContinuous());
 }
 
 Frame& Frame::operator=(Frame const& other)
