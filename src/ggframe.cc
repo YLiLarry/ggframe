@@ -2,8 +2,8 @@
 #include <iostream>
 
 #include <opencv2/xfeatures2d/nonfree.hpp>
-#include <opencv2/highgui.hpp>
 #include <opencv2/features2d/features2d.hpp>
+#include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
 using namespace std;
@@ -12,10 +12,8 @@ using namespace cv::xfeatures2d;
 using ggframe::Size;
 
 #if APPLE
-	using boost::filesystem::path;
+	using boost;
 	using std::shared_ptr;
-#else
-	using std::filesystem::path;
 #endif
 
 Frame::Frame()
@@ -30,20 +28,16 @@ Frame::Frame(unsigned nrows, unsigned ncols)
 	m_image = make_unique<image_t>(nrows, ncols, CV_8UC4, 0);
 }
 
-Frame::Frame(path filepath)
+Frame::Frame(filesystem::path filepath)
 {
 	m_image = make_unique<image_t>();
 	load(filepath);
 }
 
-void Frame::display() const
+void Frame::display(string const& title) const
 {
-	static string window_title = "";
-	if (window_title.length() == 0) {
-		window_title = "ggframe";
-		cv::namedWindow(window_title);
-	}
-	cv::imshow("ggframe", *m_image);
+	string window_title = title.size() ? title : "ggframe";
+	cv::imshow(window_title, *m_image);
 	cv::waitKey(1);
 }
 
@@ -75,12 +69,12 @@ uint8_t Frame::get(unsigned r, unsigned c, Color color) const
 	return m_image->at<cv::Vec4b>(r,c)[colorIndex(color)];
 }
 
-void Frame::save(path path)
+void Frame::save(filesystem::path path)
 {
 	cv::imwrite(path.string().c_str(), *m_image);
 }
 
-void Frame::load(path path)
+void Frame::load(filesystem::path path)
 {
 	*m_image = cv::imread(path.string().c_str());
 }
@@ -178,8 +172,10 @@ Pos Pos::rc(int r, int c)
     return rtv;
 }
 
-ggframe::Size ggframe::Size::hw(int h, int w)
+ggframe::Size ggframe::Size::hw(unsigned h, unsigned w)
 {
+    assert(h > 0);
+    assert(w > 0);
     Size rtv;
     rtv.m_h = h;
     rtv.m_w = w;
@@ -209,51 +205,6 @@ unsigned Frame::nCols() const
 unsigned Frame::nRows() const
 {
 	return m_image->rows;
-}
-
-void Frame::displaySift() const
-{
-	return displaySiftInRec(frameRec());
-}
-
-void Frame::showKeyPoints(vector<KeyPoint> const& keypoints) const
-{
-	Mat mat_keypts;
-	drawKeypoints(*m_image, keypoints, mat_keypts);
-	cv::imshow("img keypoints", mat_keypts);
-	cv::waitKey(0);
-}
-
-void Frame::displaySiftInRec(Rec const& rec) const
-{
-	vector<KeyPoint> kps = getSiftKeyPointsInRec(rec);
-	showKeyPoints(kps);
-}
-
-vector<KeyPoint> Frame::getSiftKeyPointsInRec(Rec const& rec) const
-{
-	shared_ptr<SIFT> sift = SIFT::create();
-	Mat mat(nRows(), nCols(), CV_8U);
-	Mat mask(nRows(), nCols(), CV_8U);
-	for (int r = 0; r < nRows(); r++) {
-		for (int c = 0; c < nCols(); c++) {
-			uint8_t v = 0;
-			v = max(v, get(r, c, Color::R));
-			v = max(v, get(r, c, Color::B));
-			v = max(v, get(r, c, Color::G));
-			mat.at<uint8_t>(r, c) = v;
-			if (rec.left() <= c && c <= rec.right()
-				&& rec.top() <= r && r <= rec.bottom()) 
-			{
-				mask.at<uint8_t>(r, c) = 1;
-			} else {
-				mask.at<uint8_t>(r, c) = 0;
-			}
-		}
-	}
-	vector<KeyPoint> keypoints;
-	sift->detect(mat, keypoints, mask);
-	return keypoints;
 }
 
 bool Rec::empty() const
@@ -357,9 +308,7 @@ Rec Rec::intersect(Rec const& other) const
 Frame::Frame(Frame const& other)
 {
 	m_grid_size = other.m_grid_size;
-	m_image = make_unique<image_t>();
-	other.m_image->copyTo(*m_image);
-	assert(m_image->isContinuous());
+	m_image = make_unique<image_t>(other.m_image->clone());
 }
 
 void Frame::crop(Rec const& rec)
@@ -367,15 +316,15 @@ void Frame::crop(Rec const& rec)
 	cv::Range row_range(rec.top(), rec.bottom());
 	cv::Range col_range(rec.left(), rec.right());
 	cv::Mat ref_mat = cv::Mat(*m_image, row_range, col_range);
-	m_image = make_unique<image_t>();
-	ref_mat.copyTo(*m_image);
-	assert(m_image->isContinuous());
+	m_image = make_unique<image_t>(ref_mat.clone());
 }
 
 Frame& Frame::operator=(Frame const& other)
 {
 	m_grid_size = other.m_grid_size;
-	m_image = make_unique<image_t>(*other.m_image);
+	m_image = make_unique<image_t>(other.m_image->clone());
+    m_keypoints = other.m_keypoints;
+    m_descriptors = other.m_descriptors.clone();
 	return *this;
 }
 
@@ -403,3 +352,32 @@ uint8_t* Frame::data()
 	return m_image->data;
 }
 
+void Frame::computeKeypoints(cv::Ptr<cv::Feature2D> extractor)
+{
+    extractor->detectAndCompute(*m_image, cv::noArray(), m_keypoints, m_descriptors);
+}
+
+vector<cv::KeyPoint>& Frame::keypoints() { return m_keypoints; }
+vector<cv::KeyPoint> const& Frame::keypoints() const { return m_keypoints; }
+
+cv::Mat& Frame::descriptors() { return m_descriptors; }
+cv::Mat const& Frame::descriptors() const { return m_descriptors; }
+
+bool Rec::containsPos(Pos const& pos) const
+{
+    return left() <= pos.col() && pos.col() <= right()
+           && top() <= pos.row() && pos.row() <= bottom();
+}
+
+bool Frame::hasKeypoints() const
+{
+    return (! m_keypoints.empty()) && (! m_descriptors.empty());
+}
+
+void Frame::makeContinuous()
+{
+    if (! m_image->isContinuous()) {
+        *m_image = m_image->clone();
+    }
+    assert(m_image->isContinuous());
+}

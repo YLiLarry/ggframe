@@ -1,5 +1,7 @@
 #include <memory>
 #include <opencv2/core.hpp>
+#include <opencv2/xfeatures2d/nonfree.hpp>
+#include <opencv2/features2d/features2d.hpp>
 
 #if APPLE
 #include <boost/filesystem.hpp>
@@ -13,10 +15,8 @@ namespace ggframe
     using namespace cv;
 
 #if APPLE
-    using boost::filesystem::path;
+    using namespace boost;
     using std::shared_ptr;
-#else
-    using std::filesystem::path;
 #endif
 
     class Pos
@@ -32,11 +32,11 @@ namespace ggframe
 
     class Size
     {
-        int m_h;
-        int m_w;
+        unsigned m_h;
+        unsigned m_w;
     public:
         Size() = default;
-        static Size hw(int h, int w);
+        static Size hw(unsigned h, unsigned w);
         unsigned height() const;
         unsigned width() const;
     };
@@ -59,6 +59,7 @@ namespace ggframe
         Rec() = default;
         static Rec tlbr(int top, int left, int bottom, int right);
         Rec intersect(Rec const& other) const;
+        bool containsPos(Pos const& pos) const;
         bool empty() const;
         friend ostream& operator<<(ostream& out, Rec const& rec);
     };
@@ -94,16 +95,16 @@ namespace ggframe
     private:
         unique_ptr<image_t> m_image;
         int m_grid_size = 1;
-        vector<KeyPoint> getSiftKeyPointsInRec(Rec const& rec) const;
-        void showKeyPoints(vector<cv::KeyPoint> const& keypoints) const;
-        cv::Mat& cvMat();
-        cv::Mat const& cvMat() const;
+        vector<cv::KeyPoint> m_keypoints;
+        cv::Mat m_descriptors;
+
+    protected:
         unsigned colorIndex(Color color) const;
 
     public:
         Frame();
         Frame(unsigned nrows, unsigned ncols);
-        Frame(path filepath);
+        Frame(filesystem::path filepath);
         Frame(Frame const& other);
         Frame& operator=(Frame const& other);
         void set(unsigned r, unsigned c, Color color, uint8_t v);
@@ -112,23 +113,31 @@ namespace ggframe
         unsigned lastRow() const;
         unsigned nCols() const;
         unsigned nRows() const;
-        void display() const;
+        void display(string const& title = "") const;
         void drawGrid();
         void setGridSize(unsigned size);
         unsigned gridSize() const;
         void drawRec(Rec const& rec);
-        void displaySift() const;
-        void displaySiftInRec(Rec const& rec) const;
         InputEvent waitForInput();
-        void save(path filepath);
-        void load(path filepath);
+        void save(filesystem::path filepath);
+        void load(filesystem::path filepath);
         Rec bestGridRecCenteredAt(Pos const&, Size const&);
         Rec frameRec() const;
-        Rec recMatchedTemplate(Frame const& pattern) const;
+        Rec recMatchedTemplate(Frame const& pattern) const; /* deprecated */
         void crop(Rec const& rec);
         bool empty() const;
         void resize(Size const& size);
+
+        cv::Mat& cvMat();
+        cv::Mat const& cvMat() const;
         uint8_t* data() const;
         uint8_t* data();
+        void computeKeypoints(cv::Ptr<cv::Feature2D> extractor);
+        vector<cv::KeyPoint>& keypoints();
+        vector<cv::KeyPoint> const& keypoints() const;
+        cv::Mat& descriptors();
+        cv::Mat const& descriptors() const;
+        bool hasKeypoints() const;
+        void makeContinuous();
     };
 }
