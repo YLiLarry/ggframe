@@ -381,3 +381,13 @@ void Frame::makeContinuous()
     }
     assert(m_image->isContinuous());
 }
+
+Pos Rec::center() const {
+    return Pos::rc((top() + bottom()) / 2, (left() + right()) / 2);
+}
+
+float Pos::dist(Pos const& other) const {
+    int dr = row() - other.row();
+    int dc = col() - other.col();
+    return sqrt(dr*dr + dc*dc);
+}

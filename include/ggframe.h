@@ -28,6 +28,7 @@ namespace ggframe
         static Pos rc(int r, int c);
         int row() const;
         int col() const;
+        float dist(Pos const& other) const;
     };
 
     class Size
@@ -61,6 +62,7 @@ namespace ggframe
         Rec intersect(Rec const& other) const;
         bool containsPos(Pos const& pos) const;
         bool empty() const;
+        Pos center() const;
         friend ostream& operator<<(ostream& out, Rec const& rec);
     };
 
